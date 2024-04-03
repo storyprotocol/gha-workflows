@@ -1,0 +1,65 @@
+name: Workflow Linting and Validation
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Linting workflow files
+        uses: ibiqlik/action-yamllint@2576378a8e339169678f9939646ee3ee325e845c # v3.1.1
+        with:
+          config_file: .github/linters/.yamllint.yml
+
+      - name: Validate GitHub Actions workflows
+        id: validate
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const workflowsDir = '.github/workflows';
+            let isValid = true;
+            let errorMessage = '';
+
+            fs.readdirSync(workflowsDir).forEach(file => {
+              const fullPath = path.join(workflowsDir, file);
+              console.log(`Validating ${fullPath}...`);
+              try {
+                const fileContents = fs.readFileSync(fullPath, 'utf8');
+                if (!fileContents.includes('name')) {
+                  throw new Error('Workflow must have a name');
+                }
+              } catch (error) {
+                isValid = false;
+                errorMessage += `Validation failed for ${file}: ${error.message}\n`;
+              }
+            });
+
+            if (!isValid) {
+              const issue_number = github.context.issue.number || github.context.payload.pull_request?.number;
+              if (issue_number) {
+                await github.rest.issues.createComment({
+                  owner: github.context.repo.owner,
+                  repo: github.context.repo.repo,
+                  issue_number: issue_number,
+                  body: `🚨 Workflow Validation Error:\n\`\`\`\n${errorMessage}\n\`\`\``,
+                });
+              }
+              core.setFailed('One or more workflow validations failed.');
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
