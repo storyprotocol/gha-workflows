@@ -1,0 +1,72 @@
+name: Reusable workflow to build and push Docker image to Amazon ECR
+
+on:
+  workflow_call:
+    inputs:
+      ecr-repo:
+        description: 'name of the ECR repository'
+        required: true
+        type: string
+      ecr-repo-aws-region:
+        description: 'AWS Region for ECR Repository'
+        required: true
+        type: string
+    secrets:
+      AWS_ACCOUNT:
+        description: 'AWS Account ID for OIDC Integration (AWS CICD Account)'
+        required: true
+      AWS_ACCOUNT_TARGET:
+        description: 'AWS Account for ECR Repository'
+        required: true
+
+# Permission can be added at job level or workflow level
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read # This is required for actions/checkout
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2 
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT }}:role/gha-oidc-cicd
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ inputs.ecr-repo-aws-region }}
+      
+      - name: Sts GetCallerIdentity
+        run: |
+          aws sts get-caller-identity
+
+      - name: Docker build
+        run: |
+          docker build -f ./dockerfile/api/Dockerfile \
+            -t ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }} \
+            -t ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:latest .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@d710430a6722f083d3b36b8339ff66b32f22ee55 # v0.19.0
+        with:
+          image-ref: ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }}
+          format: 'table'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Get AWS ECR login using oidc token
+        run: |
+          aws ecr get-login-password --region ${{ inputs.ecr-repo-aws-region }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com
+
+      - name: Docker push to AWS ECR
+        run: |
+          docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }}
+          docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:latest
+
+      # [Extremely Important]
+      - name: Remove the cached AWS credentials from the runner
+        run: |
+          rm -rf /home/runner/.docker/config.json
