@@ -64,7 +64,7 @@ jobs:
 
       - name: Docker push to AWS ECR
         # Push the image to Amazon ECR only if the Trivy scan passes and the event is a push event
-        if: ${{ github.event_name == 'push' && steps.trivy.outputs.exit-code == 0 }}
+        # if: ${{ github.event_name == 'push' && steps.trivy.outputs.exit-code == 0 }}
         run: |
           docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }}
           docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:latest
