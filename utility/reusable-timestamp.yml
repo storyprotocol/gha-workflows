@@ -2,6 +2,12 @@ name: Reusable Workflow to print out timestamp
 
 on:
   workflow_call:
+    inputs:
+      timezone:
+        description: 'Timezone to use for timestamp'
+        required: false
+        type: string
+        default: 'America/Los_Angeles'
 
 jobs:
   timestamp:
@@ -10,7 +16,7 @@ jobs:
 
       - name: Generate timestamp
         run: |
-          echo "TIMESTAMP=$(TZ='America/Los_Angeles' date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+          echo "TIMESTAMP=$(TZ=${{ inputs.timezone }} date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
 
       - name: Print timestamp
         run: |
