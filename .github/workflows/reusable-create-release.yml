@@ -2,6 +2,11 @@ name: Reusable workflow to create release in GitHub
 
 on:
   workflow_call:
+    inputs:
+      version_to_publish:
+        type: string
+        required: true
+        description: 'Version to be published'
 
 permissions:
   contents: write
@@ -14,8 +19,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
 
+      - name: Tag and Push
+        run: |
+          VERSION=${{ github.event.inputs.version_to_publish }}
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          git tag -a v$VERSION -m "Release v$VERSION"
+          git push origin v$VERSION
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build Changelog
-        id: github_release
+        id: build_changelog
         uses: mikepenz/release-changelog-builder-action@32e3c96f29a6532607f638797455e9e98cfc703d #v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -23,4 +38,4 @@ jobs:
       - name: Create Release
         uses: mikepenz/action-gh-release@v1 #softprops/action-gh-release
         with:
-          body: ${{steps.github_release.outputs.changelog}}
+          body: ${{ steps.build_changelog.outputs.changelog }}
