@@ -10,7 +10,8 @@ on:
 
 permissions:
   contents: write
-    
+  actions: write
+
 jobs:
   release:
     # if: startsWith(github.ref, 'refs/tags/')
@@ -19,19 +20,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
 
+      - name: Retrieve Previous Tag Before Creating New Tag
+        id: get_previous_tag
+        run: |
+          git fetch --tags
+          # Get the last tag from the list of tags sorted by creation date
+          LATEST_TAG=$(git tag --sort=creatordate | tail -n1)
+          echo "The latest tag based on creation date is $LATEST_TAG"
+          echo "fromTag=$LATEST_TAG" >> $GITHUB_ENV
+
       - name: Tag and Push
+        id: tag_and_push
         run: |
           VERSION=${{ inputs.version_to_publish }}
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
           git tag -a v$VERSION -m "Release v$VERSION"
           git push origin v$VERSION
+          echo "toTag=v$VERSION" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Changelog
         id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@32e3c96f29a6532607f638797455e9e98cfc703d #v4
+        uses: mikepenz/release-changelog-builder-action@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
