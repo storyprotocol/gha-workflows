@@ -1,0 +1,136 @@
+name: Reusable workflow to plan Terraform changes
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        type: string
+        required: true
+        description: 'Path to Terraform configuration'
+      role: 
+        type: string
+        required: true
+        description: 'Role to assume in the target AWS account'
+      terraform_version:
+        type: string
+        required: true
+        description: 'Terraform version to use'
+    secrets:
+      AWS_ACCOUNT_DEV_STAGING:
+        description: 'AWS account ID for dev or staging environment'
+        required: false
+      AWS_ACCOUNT_PROD:
+        description: 'AWS account ID for production environment'
+        required: false
+
+permissions:
+  id-token: write
+  contents: write
+  actions: write
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse the path to extract env and aws_region
+        id: parse_path
+        run: |
+          # Split the string using '/'
+          IFS='/' read -r -a path_parts <<< "${{ inputs.path }}"
+
+          # Select the 4th part of the path, which is "dev-us-east-1"
+          part_of_interest="${path_parts[3]}"
+
+          # Split 'part_of_interest' using '-' to separate 'dev' and 'us-east-1'
+          IFS='-' read -r env region1 region2 region3 <<< "$part_of_interest"
+          aws_region="$region1-$region2-$region3"
+
+          # Print the results
+          echo "Environment: $env"
+          echo "AWS Region: $aws_region"
+
+          # Set the outputs
+          echo "env_string=$env" >> $GITHUB_ENV
+          echo "aws_region=$aws_region" >> $GITHUB_ENV
+      
+      - name: Translate environment to AWS account ID
+        id: translate_env_to_aws_account_id
+        run: |
+          env="${{ env.env_string }}"
+          case $env in
+            dev|staging)
+              aws_account_id="${{ secrets.AWS_ACCOUNT_DEV_STAGING }}"
+              ;;
+            prod)
+              aws_account_id="${{ secrets.AWS_ACCOUNT_PROD }}"
+              ;;
+            *)
+              echo "Invalid environment: $env"
+              exit 1
+              ;;
+          esac
+          echo "AWS Account ID: $aws_account_id"
+          echo "aws_account_id=$aws_account_id" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::${{ env.aws_account_id }}:role/${{ inputs.role }}
+          aws-region: ${{ env.aws_region }}
+          role-session-name: github-actions
+                  
+      - name: Checkout
+        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@97f030cf6dc0b4f5e0da352c7bca9cca34579800 # v3.1.0
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Init
+        id: init
+        run: |
+          cd ${{ inputs.path }}
+          terraform init -no-color
+
+      - name: Terraform Validate
+        id: validate
+        if: success() || failure()
+        run: |
+          cd ${{ inputs.path }}
+          terraform validate -no-color
+
+      - name: Plan changes
+        id: plan
+        run: |
+          cd ${{ inputs.path }}
+          terraform plan -no-color 
+          terraform apply -auto-approve -no-color
+
+      # Add a comment to pull requests with plan results
+      - name: Add Plan Comment
+        id: comment
+        uses: actions/github-script@v6
+        env:
+          PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`${process.env.PLAN}\`\`\`
+
+            </details>
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+              
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
