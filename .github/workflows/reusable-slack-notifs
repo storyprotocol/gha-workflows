@@ -43,7 +43,7 @@ jobs:
                   "type": "image",
                   "title": {
                     "type": "plain_text",
-                    "text": "Published to Registry"
+                    "text": inputs.title
                   },
                   "image_url": inputs.img-url,
                   "alt_text": inputs.img-alt-text
