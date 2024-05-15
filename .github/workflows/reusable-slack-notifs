@@ -1,0 +1,61 @@
+name: Reusable workflow to create slack notifications
+
+on:
+  workflow_call:
+    inputs:
+      short-desc:
+        description: 'Description of the slack messsage'
+        required: true
+        type: string
+      title:
+        description: 'Title of slack message'
+        required: true
+        type: string
+      img-url:
+        description: 'url of image in slack message'
+        required: true
+        type: string
+      img-alt-text:
+        description: 'alt text of image'
+        required: false
+        type: string
+        default: 'image can't be displayed'
+    secrets:
+      channel-name:
+        required: true
+      slack-bot-token:
+        required: true
+
+jobs:
+  slack-notif:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push Slack Notification
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: ${{ secrets.channel-name }}
+          payload: |
+            {
+              "text": inputs.short-desc,
+              "blocks": [
+                { "type": "divider" },
+                {
+                  "type": "image",
+                  "title": {
+                    "type": "plain_text",
+                    "text": "Published to Registry"
+                  },
+                  "image_url": inputs.img-url,
+                  "alt_text": inputs.img-alt-text
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": inputs.short-desc 
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.slack-bot-token }}
