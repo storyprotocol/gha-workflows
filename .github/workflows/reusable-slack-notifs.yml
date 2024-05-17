@@ -35,23 +35,23 @@ jobs:
           channel-id: ${{ secrets.channel-name }}
           payload: |
             {
-              "text": "${{ github.event.inputs.short-desc }}",
+              "text": "${{ inputs.short-desc }}",
               "blocks": [
                 { "type": "divider" },
                 {
                   "type": "image",
                   "title": {
                     "type": "plain_text",
-                    "text": "${{ github.event.inputs.title }}"
+                    "text": "${{ inputs.title }}"
                   },
-                  "image_url": "${{ github.event.inputs.img-url }}",
-                  "alt_text": "${{ github.event.inputs.img-alt-text }}"
+                  "image_url": "${{ inputs.img-url }}",
+                  "alt_text": "${{ inputs.img-alt-text }}"
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "${{ github.event.inputs.short-desc }}" 
+                    "text": "${{ inputs.short-desc }}" 
                   }
                 }
               ]
