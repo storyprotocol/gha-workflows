@@ -17,9 +17,8 @@ on:
         type: string
       img-alt-text:
         description: 'alt text of image'
-        required: false
+        required: true
         type: string
-        default: 'image can't be displayed'
     secrets:
       channel-name:
         required: true
