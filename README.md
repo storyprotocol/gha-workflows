@@ -6,6 +6,7 @@
 |----------|----------|----------|
 | reusable-timestamp.yml | print out timestamp of the workflow | [README](docs/utility/readme-reusable-timestamp.md)
 | reusable-lint-go-workflow.yml | lint Go code | [README](docs/utility/readme-reusable-lint-go-workflow.md)
+| reusable-slack-notifs.yml | send slack notifications | [README](docs/utility/readme-reusable-slack-notifs.md)
 
 ## CI/CD
 
