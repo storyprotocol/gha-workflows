@@ -87,7 +87,7 @@ jobs:
       - name: Run Anvil
         id: run_anvil
         run: |
-          anvil --fork-url ${SEPOLIA_RPC_PROVIDER_URL} --block-time 1 --silent &
+          anvil --fork-url ${SEPOLIA_RPC_PROVIDER_URL} --silent &
         continue-on-error: false
 
       - name: Test
