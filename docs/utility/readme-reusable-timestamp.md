@@ -11,7 +11,6 @@ Reusable timestamp workflow
 ## Inputs
 
 - Timezone (string): required, timezone of workflow, default is LA/America
-- Workflow input #2 (type):
   
 ## Secrets
 
