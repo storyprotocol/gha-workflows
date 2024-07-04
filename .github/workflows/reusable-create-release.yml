@@ -7,6 +7,10 @@ on:
         type: string
         required: true
         description: 'Version to be published'
+      tag_to_publish:
+        type: string
+        required: false
+        description: 'Tag name to be published'
 
 permissions:
   contents: write
@@ -51,4 +55,5 @@ jobs:
         uses: mikepenz/action-gh-release@v0.2.0-a03 #softprops/action-gh-release
         with:
           tag_name: v${{ inputs.version_to_publish }}
+          name: '${{ inputs.tag_to_publish }}@{${{ inputs.version_to_publish }}}'
           body: ${{ steps.build_changelog.outputs.changelog }}
