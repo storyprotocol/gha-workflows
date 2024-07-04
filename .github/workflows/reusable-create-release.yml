@@ -38,7 +38,6 @@ jobs:
           git tag -a $TAG_NAME -m "Release $TAG_NAME"
           git push origin $TAG_NAME
           echo "toTag=$TAG_NAME" >> $GITHUB_ENV
-          cat $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
