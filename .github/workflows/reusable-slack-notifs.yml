@@ -13,8 +13,9 @@ on:
         type: string
       img-url:
         description: 'url of image in slack message'
-        required: true
+        required: false
         type: string
+        default: ''
       img-alt-text:
         description: 'alt text of image'
         required: true
@@ -29,7 +30,8 @@ jobs:
   slack-notif:
     runs-on: ubuntu-latest
     steps:
-      - name: Push Slack Notification
+      - name: Push Slack Notification With Image
+        if: ${{ inputs.img-url != '' }}
         uses: slackapi/slack-github-action@v1.25.0
         with:
           channel-id: ${{ secrets.channel-name }}
@@ -58,3 +60,26 @@ jobs:
             }
         env:
           SLACK_BOT_TOKEN: ${{ secrets.slack-bot-token }}
+
+      - name: Push Slack Notification Without Image
+        if: ${{ inputs.img-url == '' }}
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: ${{ secrets.channel-name }}
+          payload: |
+            {
+              "text": "${{ inputs.short-desc }}",
+              "blocks": [
+                { "type": "divider" },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ inputs.short-desc }}" 
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.slack-bot-token }}
+        
