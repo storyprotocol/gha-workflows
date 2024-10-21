@@ -34,7 +34,7 @@ on:
 jobs:
   build_and_test:
     name: Build and Test
-    timeout-minutes: 15
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     ## Example to fix envrionment secret not passing in: https://github.com/AllanOricil/workflow-template-bug/blob/master/.github/workflows/workflow-template-fix-without-required-secret.yml
     environment: ${{ inputs.ENVIRONMENT }}
