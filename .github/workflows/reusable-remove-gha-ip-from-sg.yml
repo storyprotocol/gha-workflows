@@ -1,0 +1,133 @@
+name: Remove GitHub Actions Runner IP from Security Groups
+
+on:
+  workflow_call:
+    inputs:
+      role_to_assume:
+        description: "The role to assume"
+        required: true
+        type: string
+      aws_region:
+        description: "The AWS region to use"
+        required: true
+        type: string
+      runner_ip:
+        description: "The IP address of the GitHub Actions runner"
+        required: true
+        type: string
+      devnet_changed:
+        description: "Boolean to check if DevNet files have changed"
+        required: true
+        type: string
+      testnet_changed:
+        description: "Boolean to check if TestNet files have changed"
+        required: true
+        type: string
+      sg_ids_devnet:
+        description: "Comma-separated list of security group IDs for DevNet"
+        required: true
+        type: string
+      sg_ids_testnet:
+        description: "Comma-separated list of security group IDs for TestNet"
+        required: true
+        type: string
+      bastion_sg_id_devnet:
+        description: "Security group ID for DevNet Bastion"
+        required: true
+        type: string
+      bastion_sg_id_testnet:
+        description: "Security group ID for TestNet Bastion"
+        required: true
+        type: string
+
+jobs:
+  remove_runner_ip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ inputs.role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions
+
+      - name: Remove GitHub Actions Runner IP from Security Groups
+        run: |
+          RUNNER_IP="${{ inputs.runner_ip }}"
+          DEVNET_CHANGED="${{ inputs.devnet_changed }}"
+          TESTNET_CHANGED="${{ inputs.testnet_changed }}"
+          SG_IDS_DEVNET="${{ inputs.sg_ids_devnet }}"
+          SG_IDS_TESTNET="${{ inputs.sg_ids_testnet }}"
+          BASTION_SG_ID_DEVNET="${{ inputs.bastion_sg_id_devnet }}"
+          BASTION_SG_ID_TESTNET="${{ inputs.bastion_sg_id_testnet }}"
+
+          # Ensure the script has execution permissions
+          chmod +x scripts/remove_ip_from_sg.sh
+
+          # Remove IP from DevNet security groups if changed
+          if [ "$DEVNET_CHANGED" = "true" ]; then
+            echo "Removing Runner IP from DevNet security groups"
+            IFS=',' read -r -a devnet_sg_array <<< "$SG_IDS_DEVNET"
+            for sg_data in "${devnet_sg_array[@]}"; do
+              sg_id=$(echo "$sg_data" | cut -d':' -f1)
+              sg_region=$(echo "$sg_data" | cut -d':' -f2)
+              echo "Removing Runner IP from DevNet Security Group $sg_id in region $sg_region"
+              if ./scripts/remove_ip_from_sg.sh "$sg_id" "DevNet" "$RUNNER_IP" "$sg_region"; then
+                echo "Successfully removed Runner IP from $sg_id in $sg_region"
+              else
+                echo "Failed to remove Runner IP from $sg_id in $sg_region"
+                exit 1
+              fi
+            done
+
+            # Remove IP from DevNet Bastion Security Group
+            if [ -n "$BASTION_SG_ID_DEVNET" ]; then
+              sg_id=$(echo "$BASTION_SG_ID_DEVNET" | cut -d':' -f1)
+              sg_region=$(echo "$BASTION_SG_ID_DEVNET" | cut -d':' -f2)
+              echo "Removing Runner IP from DevNet Bastion Security Group $sg_id in region $sg_region"
+              if ./scripts/remove_ip_from_sg.sh "$sg_id" "DevNet-Bastion" "$RUNNER_IP" "$sg_region"; then
+                echo "Successfully removed Runner IP from $sg_id in $sg_region"
+              else
+                echo "Failed to remove Runner IP from $sg_id in $sg_region"
+                exit 1
+              fi
+            fi
+          else
+            echo "DevNet unchanged, skipping Runner IP removal"
+          fi
+
+          # Remove IP from TestNet security groups if changed
+          if [ "$TESTNET_CHANGED" = "true" ]; then
+            echo "Removing Runner IP from TestNet security groups"
+            IFS=',' read -r -a testnet_sg_array <<< "$SG_IDS_TESTNET"
+            for sg_data in "${testnet_sg_array[@]}"; do
+              sg_id=$(echo "$sg_data" | cut -d':' -f1)
+              sg_region=$(echo "$sg_data" | cut -d':' -f2)
+              echo "Removing Runner IP from TestNet Security Group $sg_id in region $sg_region"
+              if ./scripts/remove_ip_from_sg.sh "$sg_id" "TestNet" "$RUNNER_IP" "$sg_region"; then
+                echo "Successfully removed Runner IP from $sg_id in $sg_region"
+              else
+                echo "Failed to remove Runner IP from $sg_id in $sg_region"
+                exit 1
+              fi
+            done
+
+            # Remove IP from TestNet Bastion Security Group
+            if [ -n "$BASTION_SG_ID_TESTNET" ]; then
+              sg_id=$(echo "$BASTION_SG_ID_TESTNET" | cut -d':' -f1)
+              sg_region=$(echo "$BASTION_SG_ID_TESTNET" | cut -d':' -f2)
+              echo "Removing Runner IP from TestNet Bastion Security Group $sg_id in region $sg_region"
+              if ./scripts/remove_ip_from_sg.sh "$sg_id" "TestNet-Bastion" "$RUNNER_IP" "$sg_region"; then
+                echo "Successfully removed Runner IP from $sg_id in $sg_region"
+              else
+                echo "Failed to remove Runner IP from $sg_id in $sg_region"
+                exit 1
+              fi
+            fi
+          else
+            echo "TestNet unchanged, skipping Runner IP removal"
+          fi

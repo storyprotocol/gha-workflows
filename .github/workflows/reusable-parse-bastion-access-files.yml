@@ -1,0 +1,72 @@
+name: Parse Bastion Access Files
+
+on:
+  workflow_call:
+    inputs:
+      devnet_file:
+        description: "Path to the DevNet bastion-access file"
+        required: true
+        type: string
+      testnet_file:
+        description: "Path to the TestNet bastion-access file"
+        required: true
+        type: string
+    outputs:
+      ips_devnet:
+        description: "The IP addresses for DevNet"
+        value: ${{ jobs.parse_bastion_files.outputs.ips_devnet }}
+      ips_testnet:
+        description: "The IP addresses for TestNet"
+        value: ${{ jobs.parse_bastion_files.outputs.ips_testnet }}
+
+jobs:
+  parse_bastion_files:
+    runs-on: ubuntu-latest
+    outputs:
+      ips_devnet: ${{ steps.parse_yaml.outputs.ips_devnet }}
+      ips_testnet: ${{ steps.parse_yaml.outputs.ips_testnet }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+
+      - name: Parse bastion-access files
+        id: parse_yaml
+        env:
+          DEVNET_FILE: ${{ inputs.devnet_file }}
+          TESTNET_FILE: ${{ inputs.testnet_file }}
+        run: |
+          # Parse DevNet bastion-access file
+          python3 scripts/parse_config.py $DEVNET_FILE
+          DEVNET_JSON="ip_permissions_${DEVNET_FILE%.*}.json"
+          if [ ! -f "$DEVNET_JSON" ]; then
+            echo "Error: $DEVNET_JSON not found."
+            exit 1
+          fi
+
+          # Add the DevNet IPs to GITHUB_OUTPUT as a single line
+          DEVNET_IPS=$(jq -c . < "$DEVNET_JSON")
+          echo "ips_devnet=$DEVNET_IPS" >> $GITHUB_OUTPUT
+
+          # Parse TestNet bastion-access file
+          python3 scripts/parse_config.py $TESTNET_FILE
+          TESTNET_JSON="ip_permissions_${TESTNET_FILE%.*}.json"
+          if [ ! -f "$TESTNET_JSON" ]; then
+            echo "Error: $TESTNET_JSON not found."
+            exit 1
+          fi
+
+          # Add the TestNet IPs to GITHUB_OUTPUT as a single line
+          TESTNET_IPS=$(jq -c . < "$TESTNET_JSON")
+          echo "ips_testnet=$TESTNET_IPS" >> $GITHUB_OUTPUT
+
+          # Print parsed data for verification
+          echo "DevNet IPs:"
+          cat "$DEVNET_JSON"
+          echo "TestNet IPs:"
+          cat "$TESTNET_JSON"
+
+      - name: Print parsed data for verification
+        run: |
+          echo "IPS_DEVNET: ${{ steps.parse_yaml.outputs.ips_devnet }}" 
+          echo "IPS_TESTNET: ${{ steps.parse_yaml.outputs.ips_testnet }}"

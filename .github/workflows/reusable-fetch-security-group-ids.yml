@@ -1,0 +1,184 @@
+name: Fetch Security Group IDs
+
+on:
+  workflow_call:
+    inputs:
+      role_to_assume:
+        description: "The role to assume"
+        required: true
+        type: string
+      aws_region:
+        description: "The AWS region to use"
+        required: true
+        type: string
+      devnet_changed:
+        description: "Boolean to check if DevNet files have changed"
+        required: true
+        type: string
+      testnet_changed:
+        description: "Boolean to check if TestNet files have changed"
+        required: true
+        type: string
+      instance_name_devnet:
+        description: "The instance name for Odyssey DevNet Bastion"
+        required: true
+        type: string
+      instance_name_testnet:
+        description: "The instance name for Odyssey TestNet Bastion"
+        required: true
+        type: string
+      role_bastion:
+        description: "The role for the Bastion host (default: bastion)"
+        required: true
+        type: string
+        default: "bastion"
+      sg_name_devnet:
+        description: "The security group name for Odyssey DevNet"
+        required: true
+        type: string
+      sg_name_testnet:
+        description: "The security group name for Odyssey TestNet"
+        required: true
+        type: string
+      aws_regions:
+        description: "Comma-separated list of AWS regions"
+        required: true
+        type: string
+      instance_region:
+        description: "The region of the Bastion instance"
+        required: true
+        type: string
+    outputs:
+      security_group_ids_devnet:
+        description: "Comma-separated security group IDs for DevNet"
+        value: ${{ jobs.fetch_security_group_ids.outputs.security_group_ids_devnet }}
+      security_group_ids_testnet:
+        description: "Comma-separated security group IDs for TestNet"
+        value: ${{ jobs.fetch_security_group_ids.outputs.security_group_ids_testnet }}
+      bastion_sg_id_devnet:
+        description: "The security group ID for DevNet Bastion"
+        value: ${{ jobs.fetch_security_group_ids.outputs.bastion_sg_id_devnet }}
+      bastion_sg_id_testnet:
+        description: "The security group ID for TestNet Bastion"
+        value: ${{ jobs.fetch_security_group_ids.outputs.bastion_sg_id_testnet }}
+
+jobs:
+  fetch_security_group_ids:
+    runs-on: ubuntu-latest
+    outputs:
+      security_group_ids_devnet: ${{ steps.get_sg_ids.outputs.security_group_ids_devnet }}
+      security_group_ids_testnet: ${{ steps.get_sg_ids.outputs.security_group_ids_testnet }}
+      bastion_sg_id_devnet: ${{ steps.get_sg_ids.outputs.bastion_security_group_id_devnet }}
+      bastion_sg_id_testnet: ${{ steps.get_sg_ids.outputs.bastion_security_group_id_testnet }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ inputs.role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions
+
+      - name: Get Security Group IDs
+        id: get_sg_ids
+        run: |
+          DEVNET_CHANGED="${{ inputs.devnet_changed }}"
+          TESTNET_CHANGED="${{ inputs.testnet_changed }}"
+          INSTANCE_NAME_ODYSSEY_DEVNET="${{ inputs.instance_name_devnet }}"
+          INSTANCE_NAME_ODYSSEY_TESTNET="${{ inputs.instance_name_testnet }}"
+          ROLE_BASTION="${{ inputs.role_bastion }}"
+          SG_NAME_DEVNET="${{ inputs.sg_name_devnet }}"
+          SG_NAME_TESTNET="${{ inputs.sg_name_testnet }}"
+
+          # Convert the comma-separated regions into an array
+          IFS=',' read -ra regions <<< "${{ inputs.aws_regions }}"
+
+          # Ensure the script has execution permissions
+          chmod +x ./scripts/get_sg_id_by_name.sh
+
+          if [ "$DEVNET_CHANGED" = "true" ]; then
+            echo "Searching for DevNet security group..."
+            SG_IDS_DEVNET=$(./scripts/get_sg_id_by_name.sh "$SG_NAME_DEVNET" "${regions[@]}")
+            if [ $? -eq 0 ] && [ -n "$SG_IDS_DEVNET" ]; then
+              echo "security_group_ids_devnet=$SG_IDS_DEVNET" >> $GITHUB_OUTPUT
+              echo "DevNet Security Group IDs: $SG_IDS_DEVNET"
+            else
+              echo "Failed to fetch DevNet Security Group IDs or no security groups found"
+              exit 1
+            fi
+
+            echo "Searching for DevNet Bastion security group..."
+            INSTANCE_ID=$(aws ec2 describe-instances \
+              --region ${{ inputs.instance_region }} \
+              --filters \
+                "Name=tag:Network,Values=$INSTANCE_NAME_ODYSSEY_DEVNET" \
+                "Name=tag:Role,Values=$ROLE_BASTION" \
+                "Name=tag:Name,Values=$INSTANCE_NAME_ODYSSEY_DEVNET" \
+              --query "Reservations[].Instances[].InstanceId" \
+              --output text)
+
+            if [ -n "$INSTANCE_ID" ]; then
+              SG_ID_DEVNET_BASTION=$(aws ec2 describe-instances \
+                --region ${{ inputs.instance_region }} \
+                --instance-ids $INSTANCE_ID \
+                --query "Reservations[].Instances[].SecurityGroups[0].GroupId" --output text)
+              
+              if [ -n "$SG_ID_DEVNET_BASTION" ]; then
+                echo "bastion_security_group_id_devnet=${SG_ID_DEVNET_BASTION}:${{ inputs.instance_region }}" >> $GITHUB_OUTPUT
+                echo "DevNet Bastion Security Group ID: $SG_ID_DEVNET_BASTION"
+              else
+                echo "Failed to fetch DevNet Bastion Security Group ID"
+                exit 1
+              fi
+            else
+              echo "Failed to find DevNet Bastion instance"
+              exit 1
+            fi
+          else
+            echo "DevNet unchanged, skipping security group ID fetch"
+          fi
+
+          if [ "$TESTNET_CHANGED" = "true" ]; then
+            echo "Searching for TestNet security group..."
+            SG_IDS_TESTNET=$(./scripts/get_sg_id_by_name.sh "$SG_NAME_TESTNET" "${regions[@]}")
+            if [ $? -eq 0 ] && [ -n "$SG_IDS_TESTNET" ]; then
+              echo "security_group_ids_testnet=$SG_IDS_TESTNET" >> $GITHUB_OUTPUT
+              echo "TestNet Security Group IDs: $SG_IDS_TESTNET"
+            else
+              echo "Failed to fetch TestNet Security Group IDs or no security groups found"
+              exit 1
+            fi
+
+            echo "Searching for TestNet Bastion security group..."
+            INSTANCE_ID=$(aws ec2 describe-instances \
+              --region ${{ inputs.instance_region }} \
+              --filters \
+                "Name=tag:Network,Values=$INSTANCE_NAME_ODYSSEY_TESTNET" \
+                "Name=tag:Role,Values=$ROLE_BASTION" \
+                "Name=tag:Name,Values=$INSTANCE_NAME_ODYSSEY_TESTNET" \
+              --query "Reservations[].Instances[].InstanceId" \
+              --output text)
+
+            if [ -n "$INSTANCE_ID" ]; then
+              SG_ID_TESTNET_BASTION=$(aws ec2 describe-instances \
+                --region ${{ inputs.instance_region }} \
+                --instance-ids $INSTANCE_ID \
+                --query "Reservations[].Instances[].SecurityGroups[0].GroupId" --output text)
+              
+              if [ -n "$SG_ID_TESTNET_BASTION" ]; then
+                echo "bastion_security_group_id_testnet=$SG_ID_TESTNET_BASTION" >> $GITHUB_OUTPUT
+                echo "TestNet Bastion Security Group ID: $SG_ID_TESTNET_BASTION"
+              else
+                echo "Failed to fetch TestNet Bastion Security Group ID"
+                exit 1
+              fi
+            else
+              echo "Failed to find TestNet Bastion instance"
+              exit 1
+            fi
+          else
+            echo "TestNet unchanged, skipping security group ID fetch"
+          fi

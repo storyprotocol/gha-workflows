@@ -1,0 +1,97 @@
+name: Revoke Inbound Rules
+
+on:
+  workflow_call:
+    inputs:
+      role_to_assume:
+        description: "The role to assume"
+        required: true
+        type: string
+      aws_region:
+        description: "The AWS region to use"
+        required: true
+        type: string
+      devnet_changed:
+        description: "Boolean to check if DevNet files have changed"
+        required: true
+        type: string
+      testnet_changed:
+        description: "Boolean to check if TestNet files have changed"
+        required: true
+        type: string
+      sg_ids_devnet:
+        description: "Comma-separated security group IDs for DevNet"
+        required: true
+        type: string
+      sg_ids_testnet:
+        description: "Comma-separated security group IDs for TestNet"
+        required: true
+        type: string
+
+jobs:
+  revoke_inbound_rules:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ inputs.role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions
+
+      - name: Revoke inbound rules for Bastion Hosts
+        run: |
+          DEVNET_CHANGED="${{ inputs.devnet_changed }}"
+          TESTNET_CHANGED="${{ inputs.testnet_changed }}"
+          SG_IDS_DEVNET="${{ inputs.sg_ids_devnet }}"
+          SG_IDS_TESTNET="${{ inputs.sg_ids_testnet }}"
+
+          # Ensure the revoke script is executable
+          chmod +x scripts/revoke_inbound_rules.sh
+
+          # Revoke rules for DevNet security group if changed
+          if [ "$DEVNET_CHANGED" = "true" ]; then
+            IFS=',' read -r -a devnet_sg_array <<< "$SG_IDS_DEVNET"
+            for sg_data in "${devnet_sg_array[@]}"; do
+              sg_id=$(echo "$sg_data" | cut -d':' -f1)
+              sg_region=$(echo "$sg_data" | cut -d':' -f2)
+              echo "Revoking inbound rules for DevNet security group $sg_id in region $sg_region"
+              ./scripts/revoke_inbound_rules.sh "$sg_id" "DevNet" "$sg_region"
+              if [ $? -ne 0 ]; then
+                echo "Failed to revoke inbound rules for DevNet security group $sg_id"
+                exit 1
+              fi
+            done
+            echo "Inbound rules have been revoked for DevNet security groups"
+          else
+            echo "DevNet unchanged, skipping security group rule revocation"
+          fi 
+
+          # Revoke rules for TestNet security group if changed
+          if [ "$TESTNET_CHANGED" = "true" ]; then
+            IFS=',' read -r -a testnet_sg_array <<< "$SG_IDS_TESTNET"
+            for sg_data in "${testnet_sg_array[@]}"; do
+              sg_id=$(echo "$sg_data" | cut -d':' -f1)
+              sg_region=$(echo "$sg_data" | cut -d':' -f2)
+              echo "Revoking inbound rules for TestNet security group $sg_id in region $sg_region"
+              AWS_DEFAULT_REGION=$sg_region ./scripts/revoke_inbound_rules.sh "$sg_id" "TestNet" "$sg_region"
+              if [ $? -ne 0 ]; then
+                echo "Failed to revoke TestNet security group rules"
+                exit 1
+              fi
+            done
+            echo "Inbound rules have been revoked for TestNet security groups"
+          else
+            echo "TestNet unchanged, skipping security group rule revocation"
+          fi  
+
+          # If both are false, output a message
+          if [ "$DEVNET_CHANGED" = "false" ] && [ "$TESTNET_CHANGED" = "false" ]; then
+            echo "No changes detected for either network, no security group rules revoked"
+          else
+            echo "Inbound rules have been revoked for changed security groups"
+          fi

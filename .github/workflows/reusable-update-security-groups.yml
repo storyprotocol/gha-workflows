@@ -1,0 +1,130 @@
+name: Update Security Groups
+
+on:
+  workflow_call:
+    inputs:
+      role_to_assume:
+        description: "The role to assume"
+        required: true
+        type: string
+      aws_region:
+        description: "The AWS region to use"
+        required: true
+        type: string
+      devnet_changed:
+        description: "Boolean to check if DevNet files have changed"
+        required: true
+        type: string
+      testnet_changed:
+        description: "Boolean to check if TestNet files have changed"
+        required: true
+        type: string
+      ips_devnet:
+        description: "The IP addresses to be added to DevNet security groups"
+        required: true
+        type: string
+      ips_testnet:
+        description: "The IP addresses to be added to TestNet security groups"
+        required: true
+        type: string
+      sg_ids_devnet:
+        description: "Comma-separated list of security group IDs for DevNet"
+        required: true
+        type: string
+      sg_ids_testnet:
+        description: "Comma-separated list of security group IDs for TestNet"
+        required: true
+        type: string
+
+jobs:
+  update_security_groups:
+    runs-on: ubuntu-latest
+    outputs:
+      devnet_sg_update: ${{ steps.update_security_groups.outputs.devnet_sg_update }}
+      testnet_sg_update: ${{ steps.update_security_groups.outputs.testnet_sg_update }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ inputs.role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions
+
+      - name: Update Security Groups with new IPs for Bastion Hosts
+        id: update_security_groups
+        run: |
+          DEVNET_CHANGED="${{ inputs.devnet_changed }}"
+          TESTNET_CHANGED="${{ inputs.testnet_changed }}"
+          IPS_DEVNET='${{ inputs.ips_devnet }}'
+          IPS_TESTNET='${{ inputs.ips_testnet }}'
+          SG_IDS_DEVNET="${{ inputs.sg_ids_devnet }}"
+          SG_IDS_TESTNET="${{ inputs.sg_ids_testnet }}"
+
+          # Ensure the update script is executable
+          chmod +x scripts/update_security_group.sh
+
+          # Update DevNet security group if changed
+          if [ "$DEVNET_CHANGED" = "true" ]; then
+            echo "Updating DevNet Security Group"
+            DEVNET_SG_UPDATE=""
+            IFS=',' read -ra sg_array <<< "$SG_IDS_DEVNET"
+            for sg_data in "${sg_array[@]}"; do
+              sg_id=$(echo "$sg_data" | cut -d':' -f1)
+              sg_region=$(echo "$sg_data" | cut -d':' -f2)
+              echo "Updating DevNet security group $sg_id in region $sg_region with IPs:"
+              echo "$IPS_DEVNET"
+
+              OUTPUT=$(./scripts/update_security_group.sh "$sg_id" "$IPS_DEVNET" "DevNet" "$sg_region" 2>&1)
+              EXIT_CODE=$?
+              echo "$OUTPUT"
+
+              if [ $EXIT_CODE -eq 0 ]; then
+                DEVNET_SG_UPDATE+="$sg_id:$sg_region:success;"
+              else
+                DEVNET_SG_UPDATE+="$sg_id:$sg_region:failure;"
+              fi
+            done
+            # Remove trailing semicolon
+            DEVNET_SG_UPDATE=$(echo "$DEVNET_SG_UPDATE" | sed 's/;$//')
+            echo "devnet_sg_update<<EOF" >> $GITHUB_OUTPUT
+            echo "$DEVNET_SG_UPDATE" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "DevNet Security Group Updates: $DEVNET_SG_UPDATE"
+          else
+            echo "DevNet unchanged, skipping security group update"
+          fi
+
+          # Update TestNet security group if changed
+          if [ "$TESTNET_CHANGED" = "true" ]; then
+            echo "Updating TestNet Security Group"
+            TESTNET_SG_UPDATE=""
+            IFS=',' read -ra sg_array <<< "$SG_IDS_TESTNET"
+            for sg_data in "${sg_array[@]}"; do
+              sg_id=$(echo "$sg_data" | cut -d':' -f1)
+              sg_region=$(echo "$sg_data" | cut -d':' -f2)
+              echo "Updating TestNet security group $sg_id in region $sg_region with IPs:"
+              echo "$IPS_TESTNET"
+
+              OUTPUT=$(./scripts/update_security_group.sh "$sg_id" "$IPS_TESTNET" "TestNet" "$sg_region" 2>&1)
+              EXIT_CODE=$?
+              echo "$OUTPUT"
+
+              if [ $EXIT_CODE -eq 0 ]; then
+                TESTNET_SG_UPDATE+="$sg_id:$sg_region:success;"
+              else
+                TESTNET_SG_UPDATE+="$sg_id:$sg_region:failure;"
+              fi
+            done
+            # Remove trailing semicolon
+            TESTNET_SG_UPDATE=$(echo "$TESTNET_SG_UPDATE" | sed 's/;$//')
+            echo "testnet_sg_update<<EOF" >> $GITHUB_OUTPUT
+            echo "$TESTNET_SG_UPDATE" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "TestNet Security Group Updates: $TESTNET_SG_UPDATE"
+          else
+            echo "TestNet unchanged, skipping security group update"
+          fi
