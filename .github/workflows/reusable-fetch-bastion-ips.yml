@@ -1,0 +1,116 @@
+name: Fetch Bastion Host IPs
+
+on:
+  workflow_call:
+    inputs:
+      role_to_assume:
+        description: "The role to assume"
+        required: true
+        type: string
+      aws_region:
+        description: "The AWS region to use"
+        required: true
+        type: string
+      devnet_changed:
+        description: "Boolean to check if DevNet files have changed"
+        required: true
+        type: string
+      testnet_changed:
+        description: "Boolean to check if TestNet files have changed"
+        required: true
+        type: string
+      instance_name_devnet:
+        description: "The instance name for Odyssey DevNet Bastion"
+        required: true
+        type: string
+      instance_name_testnet:
+        description: "The instance name for Odyssey TestNet Bastion"
+        required: true
+        type: string
+      role_bastion:
+        description: "The role for the Bastion host (default: bastion)"
+        required: true
+        type: string
+        default: "bastion"
+      instance_region:
+        description: "The region to search for instances"
+        required: true
+        type: string
+    outputs:
+      instance_ip_odyssey_devnet:
+        description: "The IP address of the DevNet Bastion host"
+        value: ${{ jobs.fetch_bastion_ips.outputs.instance_ip_odyssey_devnet }}
+      instance_ip_odyssey_testnet:
+        description: "The IP address of the TestNet Bastion host"
+        value: ${{ jobs.fetch_bastion_ips.outputs.instance_ip_odyssey_testnet }}
+
+jobs:
+  fetch_bastion_ips:
+    runs-on: ubuntu-latest
+    outputs:
+      instance_ip_odyssey_devnet: ${{ steps.get_instance_ips.outputs.instance_ip_odyssey_devnet }}
+      instance_ip_odyssey_testnet: ${{ steps.get_instance_ips.outputs.instance_ip_odyssey_testnet }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ inputs.role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions
+
+      - name: Fetch Bastion Host IPs
+        id: get_instance_ips
+        run: |
+          DEVNET_CHANGED="${{ inputs.devnet_changed }}"
+          TESTNET_CHANGED="${{ inputs.testnet_changed }}"
+          INSTANCE_NAME_ODYSSEY_DEVNET="${{ inputs.instance_name_devnet }}"
+          INSTANCE_NAME_ODYSSEY_TESTNET="${{ inputs.instance_name_testnet }}"
+          ROLE_BASTION="${{ inputs.role_bastion }}"
+          INSTANCE_REGION="${{ inputs.instance_region }}"
+
+          # Fetch DevNet Bastion IP if changes are detected
+          if [ "$DEVNET_CHANGED" = "true" ]; then
+            echo "Fetching DevNet Bastion IP"
+            INSTANCE_IP_ODYSSEY_DEVNET=$(aws ec2 describe-instances \
+              --region $INSTANCE_REGION \
+              --filters "Name=tag:Network,Values=$INSTANCE_NAME_ODYSSEY_DEVNET" "Name=tag:Role,Values=$ROLE_BASTION" \
+              --query "Reservations[].Instances[].PublicIpAddress" \
+              --output text)
+
+            if [ -n "$INSTANCE_IP_ODYSSEY_DEVNET" ]; then
+              echo "Odyssey DevNet Instance IP: $INSTANCE_IP_ODYSSEY_DEVNET"
+              echo "instance_ip_odyssey_devnet=$INSTANCE_IP_ODYSSEY_DEVNET" >> $GITHUB_OUTPUT
+            else
+              echo "Failed to fetch DevNet IP or no instance found"
+            fi
+          else
+            echo "DevNet unchanged, skipping IP fetch"
+          fi
+
+          # Fetch TestNet Bastion IP if changes are detected
+          if [ "$TESTNET_CHANGED" = "true" ]; then
+            echo "Fetching TestNet Bastion IP"
+            INSTANCE_IP_ODYSSEY_TESTNET=$(aws ec2 describe-instances \
+              --region $INSTANCE_REGION \
+              --filters "Name=tag:Network,Values=$INSTANCE_NAME_ODYSSEY_TESTNET" "Name=tag:Role,Values=$ROLE_BASTION" \
+              --query "Reservations[].Instances[].PublicIpAddress" \
+              --output text)
+
+            if [ -n "$INSTANCE_IP_ODYSSEY_TESTNET" ]; then
+              echo "Odyssey TestNet Instance IP: $INSTANCE_IP_ODYSSEY_TESTNET"
+              echo "instance_ip_odyssey_testnet=$INSTANCE_IP_ODYSSEY_TESTNET" >> $GITHUB_OUTPUT
+            else
+              echo "Failed to fetch TestNet IP or no instance found"
+            fi
+          else
+            echo "TestNet unchanged, skipping IP fetch"
+          fi
+
+          # Display the fetched IPs (if any)
+          if [ -n "$INSTANCE_IP_ODYSSEY_DEVNET" ]; then
+            echo "Odyssey DevNet Instance IP: $INSTANCE_IP_ODYSSEY_DEVNET"
+          fi
+          if [ -n "$INSTANCE_IP_ODYSSEY_TESTNET" ]; then
+            echo "Odyssey TestNet Instance IP: $INSTANCE_IP_ODYSSEY_TESTNET"
+          fi

@@ -1,0 +1,70 @@
+name: Check Network File Changes
+
+on:
+  workflow_call:
+    secrets:
+      token:
+        required: true
+    outputs:
+      devnet_changed:
+        description: 'Whether the devnet network files were changed'
+        value: ${{ jobs.check-network-changes.outputs.devnet_changed }}
+      testnet_changed:
+        description: 'Whether the testnet network files were changed'
+        value: ${{ jobs.check-network-changes.outputs.testnet_changed }}
+
+jobs:
+  check-network-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      devnet_changed: ${{ steps.check_changes.outputs.devnet_changed }}
+      testnet_changed: ${{ steps.check_changes.outputs.testnet_changed }}
+
+    steps:
+      - uses: jitterbit/get-changed-files@v1
+        id: changed_files
+        with:
+          format: space-delimited
+          token: ${{ secrets.token }}
+
+      - name: Determine if relevant files changed and retrieve network types
+        id: check_changes
+        run: |
+          CHANGED_FILES="${{ steps.changed_files.outputs.modified }}"
+          echo "Changed files: $CHANGED_FILES"
+
+          # Define the files we care about
+          AUTHORIZED_KEYS_DEVNET="authorized_keys_odyssey_devnet"
+          AUTHORIZED_KEYS_TESTNET="authorized_keys_odyssey_testnet"
+          BASTION_ACCESS_DEVNET="bastion-access-devnet.yml"
+          BASTION_ACCESS_TESTNET="bastion-access-testnet.yml"
+
+          # Initialize flags for network types
+          DEVNET_CHANGED=false
+          TESTNET_CHANGED=false
+
+          # Check if any of the files were modified and set the flags
+          if echo "$CHANGED_FILES" | grep -q "$AUTHORIZED_KEYS_DEVNET"; then
+            DEVNET_CHANGED=true
+            echo "authorized_keys for devnet changed"
+          fi
+          if echo "$CHANGED_FILES" | grep -q "$AUTHORIZED_KEYS_TESTNET"; then
+            TESTNET_CHANGED=true
+            echo "authorized_keys for testnet changed"
+          fi
+          if echo "$CHANGED_FILES" | grep -q "$BASTION_ACCESS_DEVNET"; then
+            DEVNET_CHANGED=true
+            echo "bastion access for devnet changed"
+          fi
+          if echo "$CHANGED_FILES" | grep -q "$BASTION_ACCESS_TESTNET"; then
+            TESTNET_CHANGED=true
+            echo "bastion access for testnet changed"
+          fi
+
+          # Output the values for use in subsequent steps
+          echo "devnet_changed=$DEVNET_CHANGED" >> $GITHUB_OUTPUT
+          echo "testnet_changed=$TESTNET_CHANGED" >> $GITHUB_OUTPUT
+
+          # Print the results for verification
+          echo "DevNet changed: $DEVNET_CHANGED"
+          echo "TestNet changed: $TESTNET_CHANGED"
