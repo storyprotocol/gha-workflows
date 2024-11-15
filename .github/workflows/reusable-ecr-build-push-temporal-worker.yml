@@ -1,0 +1,76 @@
+name: Reusable workflow to build and push Docker image to Amazon ECR
+
+on:
+  workflow_call:
+    inputs:
+      ecr-repo:
+        description: 'name of the ECR repository'
+        required: true
+        type: string
+      ecr-repo-aws-region:
+        description: 'AWS Region for ECR Repository'
+        required: true
+        type: string
+    secrets:
+      AWS_ACCOUNT:
+        description: 'AWS Account ID for OIDC Integration (AWS CICD Account)'
+        required: true
+      AWS_ACCOUNT_TARGET:
+        description: 'AWS Account for ECR Repository'
+        required: true
+
+# Permission can be added at job level or workflow level
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read # This is required for actions/checkout
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2 
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT }}:role/gha-oidc-cicd
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ inputs.ecr-repo-aws-region }}
+      
+      - name: Sts GetCallerIdentity
+        run: |
+          aws sts get-caller-identity
+
+      - name: Docker build
+        run: |
+          docker build -f ./dockerfile/temporal-worker/Dockerfile \
+            -t ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }} \
+            -t ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:latest .
+
+      # TEMPORARY DISABLED due to DB downloading rate limit from Trivy
+      # - name: Run Trivy vulnerability scanner
+      #   id: trivy
+      #   uses: aquasecurity/trivy-action@b2933f565dbc598b29947660e66259e3c7bc8561 # v0.20.0
+      #   with:
+      #     image-ref: ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }}
+      #     format: 'table'
+      #     ignore-unfixed: true
+      #     vuln-type: 'os,library'
+      #     severity: 'CRITICAL,HIGH'
+
+      - name: Get AWS ECR login using oidc token
+        run: |
+          aws ecr get-login-password --region ${{ inputs.ecr-repo-aws-region }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com
+
+      - name: Docker push to AWS ECR
+        # Push the image to Amazon ECR only if the Trivy scan passes and the event is a push event
+        # if: ${{ github.event_name == 'push' && steps.trivy.outputs.exit-code == 0 }}
+        run: |
+          docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }}
+          docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:latest
+
+      # [Extremely Important]
+      - name: Remove the cached AWS credentials from the runner
+        run: |
+          rm -rf /home/runner/.docker/config.json
