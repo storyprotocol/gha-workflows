@@ -11,6 +11,11 @@ on:
         description: 'AWS Region for ECR Repository'
         required: true
         type: string
+      image-tag:
+        description: 'Tag for the Docker image'
+        required: false
+        type: string
+        default: ${{ github.sha }}  # Default to commit SHA if not provided
     secrets:
       AWS_ACCOUNT:
         description: 'AWS Account ID for OIDC Integration (AWS CICD Account)'
@@ -45,7 +50,7 @@ jobs:
       - name: Docker build
         run: |
           docker build -f ./dockerfile/temporal-worker/Dockerfile \
-            -t ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }} \
+            -t ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ inputs.image-tag }} \
             -t ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:latest .
 
       # TEMPORARY DISABLED due to DB downloading rate limit from Trivy
@@ -67,7 +72,7 @@ jobs:
         # Push the image to Amazon ECR only if the Trivy scan passes and the event is a push event
         # if: ${{ github.event_name == 'push' && steps.trivy.outputs.exit-code == 0 }}
         run: |
-          docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ github.sha }}
+          docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:${{ inputs.image-tag }}
           docker push ${{ secrets.AWS_ACCOUNT_TARGET }}.dkr.ecr.${{ inputs.ecr-repo-aws-region }}.amazonaws.com/${{ inputs.ecr-repo }}:latest
 
       # [Extremely Important]
