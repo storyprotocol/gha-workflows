@@ -12,8 +12,6 @@ on:
     secrets:
       WALLET_PRIVATE_KEY:
         required: true
-      SEPOLIA_WALLET_PRIVATE_KEY:
-        required: true
       STORY_TEST_NET_WALLET_PRIVATE_KEY:
         required: true
 
