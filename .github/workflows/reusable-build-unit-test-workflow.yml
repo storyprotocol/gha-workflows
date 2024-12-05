@@ -54,7 +54,7 @@ jobs:
 
       - name: Test
         run: |
-          pnpm test:unit
+          pnpm test
 
       - name: Build
         run: 
