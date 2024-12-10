@@ -53,7 +53,8 @@ jobs:
         run: pnpm fix
 
       - name: Test
-        run: pnpm test
+        run: |
+          npm run test:integration
 
       - name: Build
         run: pnpm build
