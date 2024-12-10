@@ -12,6 +12,8 @@ on:
     secrets:
       WALLET_PRIVATE_KEY:
         required: true
+      TEST_WALLET_ADDRESS:
+        required: true
 
 jobs:
   build_and_test:
@@ -25,6 +27,7 @@ jobs:
         node-version: [20.0.0]
     env:
       WALLET_PRIVATE_KEY: ${{ secrets.WALLET_PRIVATE_KEY }}
+      TEST_WALLET_ADDRESS: ${{ secrets.TEST_WALLET_ADDRESS }}
 
     steps:
       - name: Check out code
