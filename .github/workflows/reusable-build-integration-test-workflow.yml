@@ -46,23 +46,15 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-
       - name: Install dependencies
-        run: |
-          pnpm install
+        run: pnpm install
 
       - name: Fix
-        run: |
-          pnpm fix
+        run: pnpm fix
 
       - name: Test
         run: |
           npm run test:integration
 
       - name: Build
-        run: 
-          pnpm build
+        run:  pnpm build
