@@ -57,4 +57,4 @@ jobs:
           npm run test:integration
 
       - name: Build
-        run:  pnpm build
+        run: pnpm build
