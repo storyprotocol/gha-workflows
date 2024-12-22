@@ -47,9 +47,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov  # Common testing packages
 
-      - name: Run tests
+      - name: Run integration tests
         run: |
-          pytest tests/unit/ --cov=./ --cov-report=xml
+          pytest tests/integration/ --cov=./ --cov-report=xml
 
       - name: Build package
         run: |
