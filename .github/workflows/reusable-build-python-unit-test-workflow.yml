@@ -49,8 +49,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov  # Common testing packages
 
-      - name: Run tests
+      - name: Run Unit tests
         run: |
+          source .venv/bin/activate
           pytest tests/unit/ --cov=./ --cov-report=xml
 
       - name: Build package
