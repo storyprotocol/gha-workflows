@@ -48,7 +48,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov  # Common testing packages
-
+      
+      - name: Debug Installed Packages
+        run: pip list
+        
       - name: Run Unit tests
         run: |
           pytest tests/unit/ --cov=./ --cov-report=xml

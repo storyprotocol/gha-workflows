@@ -49,6 +49,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov  # Common testing packages
 
+      - name: Debug Installed Packages
+        run: pip list
+
       - name: Run integration tests
         run: |
           pytest tests/integration/ --cov=./ --cov-report=xml
