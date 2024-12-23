@@ -55,6 +55,7 @@ jobs:
 
       - name: Run integration tests
         run: |
+          source .venv/bin/activate 
           pytest tests/integration/ --cov=./ --cov-report=xml
 
       - name: Build package
