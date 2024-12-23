@@ -49,9 +49,6 @@ jobs:
           pip install -r requirements.txt || exit 1
           pip install pytest pytest-cov  # Common testing packages
         shell: bash
-      
-      - name: Debug Installed Packages
-        run: pip list
 
       - name: Run Unit tests
         run: |

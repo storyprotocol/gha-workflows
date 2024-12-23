@@ -50,9 +50,6 @@ jobs:
           pip install pytest pytest-cov  # Common testing packages
         shell: bash
 
-      - name: Debug Installed Packages
-        run: pip list
-
       - name: Run integration tests
         run: |
           source .venv/bin/activate 
