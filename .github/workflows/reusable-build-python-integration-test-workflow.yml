@@ -51,7 +51,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          python -m pytest tests/integration/ --cov=./ --cov-report=xml
+          pytest tests/integration/ --cov=./ --cov-report=xml
 
       - name: Build package
         run: |

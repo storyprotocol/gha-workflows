@@ -51,7 +51,7 @@ jobs:
 
       - name: Run Unit tests
         run: |
-          python -m pytest tests/unit/ --cov=./ --cov-report=xml
+          pytest tests/unit/ --cov=./ --cov-report=xml
 
       - name: Build package
         run: |
