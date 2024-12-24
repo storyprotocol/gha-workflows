@@ -54,8 +54,3 @@ jobs:
         run: |
           source .venv/bin/activate 
           pytest tests/integration/ --cov=./ --cov-report=xml
-
-      - name: Build package
-        run: |
-          pip install build
-          python -m build
