@@ -20,7 +20,11 @@ on:
         required: false
         default: "./Dockerfile"
         type: string
-
+      dockerfile_context:
+        description: "Path to the Docker build context"
+        required: false
+        default: "."
+        type: string
 jobs:
   build-and-push:
     name: Build and Push Docker Image
@@ -52,4 +56,4 @@ jobs:
             --push \
             --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ inputs.app_name }}:${{ github.sha }} \
             -f "${{ inputs.dockerfile_path }}" \
-            .
+            "${{ inputs.dockerfile_context }}"
