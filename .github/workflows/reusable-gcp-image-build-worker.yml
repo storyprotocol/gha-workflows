@@ -25,6 +25,11 @@ on:
         required: false
         default: "."
         type: string
+      env_vars:
+        type: string
+        description: "Environment variables in KEY=VAL format"
+        required: false
+        default: ''
 jobs:
   build-and-push:
     name: Build and Push Docker Image
@@ -34,6 +39,16 @@ jobs:
       CLUSTER_NAME: ${{ inputs.target_environment == 'production' && 'use1-prod' || 'use1-stage' }}
 
     steps:
+      - name: Load custom env vars
+        if: ${{ inputs.env_vars }}
+        shell: bash
+        run: |
+          echo "${{ inputs.env_vars }}" | awk -F= '/^[A-Z_]+=/ {print $1"="$2}' >> $GITHUB_ENV
+      - name: Debug raw input
+        run: |
+          echo "Parsed environment:"
+          printenv | grep -E 'NEXT_PUBLIC_'
+
       - name: Check out repository
         uses: actions/checkout@v4
 
