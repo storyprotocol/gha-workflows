@@ -30,8 +30,6 @@ jobs:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
 
-    environment: ${{ inputs.target_environment }}
-
     env:
       CLUSTER_NAME: ${{ inputs.target_environment == 'production' && 'use1-prod' || 'use1-stage' }}
 
@@ -42,7 +40,7 @@ jobs:
       - name: Authenticate with GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          credentials_json: ${{ inputs.target_environment == 'production' && secrets.GCP_SERVICE_ACCOUNT_KEY_PROD || secrets.GCP_SERVICE_ACCOUNT_KEY_STAGING }}
 
       - name: Configure Docker for GCP
         run: gcloud auth configure-docker
@@ -54,6 +52,6 @@ jobs:
         run: |
           docker build \
             --push \
-            --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ inputs.app_name }}:${{ github.sha }} \
+            --tag gcr.io/${CLUSTER_NAME}/${{ inputs.app_name }}:${{ github.sha }} \
             -f "${{ inputs.dockerfile_path }}" \
             "${{ inputs.dockerfile_context }}"
