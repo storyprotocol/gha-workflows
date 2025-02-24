@@ -36,19 +36,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      CLUSTER_NAME: ${{ inputs.target_environment == 'production' && 'use1-prod' || 'use1-stage' }}
+      GCP_PROJECT_ID: ${{ inputs.target_environment == 'production' && 'story-product' || 'story-stage-product' }}
 
     steps:
-      - name: Load custom env vars
-        if: ${{ inputs.env_vars }}
-        shell: bash
-        run: |
-          echo "${{ inputs.env_vars }}" | awk -F= '/^[A-Z_]+=/ {print $1"="$2}' >> $GITHUB_ENV
-      - name: Debug raw input
-        run: |
-          echo "Parsed environment:"
-          printenv | grep -E 'NEXT_PUBLIC_'
-
       - name: Check out repository
         uses: actions/checkout@v4
 
@@ -65,8 +55,10 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
+          echo '${{ inputs.env_vars }}' > .env
           docker build \
             --push \
-            --tag gcr.io/${CLUSTER_NAME}/${{ inputs.app_name }}:${{ github.sha }} \
+            --tag gcr.io/${GCP_PROJECT_ID}/${{ inputs.app_name }}:${{ github.sha }} \
             -f "${{ inputs.dockerfile_path }}" \
             "${{ inputs.dockerfile_context }}"
+          rm .env
