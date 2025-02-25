@@ -1,0 +1,71 @@
+name: "Publish App Release Message"
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Name of the application"
+        required: true
+        type: string
+      k8s_ns:
+        description: "Kubernetes namespace"
+        required: true
+        type: string
+      target_environment:
+        description: "Name of the environment (e.g. staging, production)"
+        required: true
+        type: string
+      image_tag:
+        description: "The image tag for release"
+        required: true
+        type: string
+
+jobs:
+  courier-publisher:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.COURIER_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: '>= 500.0.0'
+
+      - name: 'Verify gcloud CLI installation'
+        run: gcloud info
+
+      - name: 'Build message JSON and publish to Pub/Sub'
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.target_environment == 'production' && 'use1-prod' || 'use1-stage' }}
+        run: |
+          MESSAGE_CONTENT=$(jq -n \
+            --arg application "${{ inputs.app_name }}" \
+            --arg namespace "${{ inputs.k8s_ns }}" \
+            --arg environment "$TARGET_ENVIRONMENT" \
+            --arg imageTag "${{ inputs.image_tag }}" \
+            '{
+              "application": $application,
+              "namespace": $namespace,
+              "environment": $environment,
+              "imageTag": $imageTag,
+              "triggeredBy": "",
+              "imageRegistry": ""
+            }'
+          )
+
+          echo "Publishing message to Pub/Sub topic: ${{ vars.COURIER_TOPIC }}"
+          
+          gcloud pubsub topics publish "${{ vars.COURIER_TOPIC }}" \
+            --message="${MESSAGE_CONTENT}" \
+            --attribute=contentType=application/json
