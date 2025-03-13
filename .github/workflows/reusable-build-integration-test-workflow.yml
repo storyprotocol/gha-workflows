@@ -14,8 +14,6 @@ on:
         required: true
       TEST_WALLET_ADDRESS:
         required: true
-      JUDGE_PRIVATE_KEY:
-        required: true
 
 jobs:
   build_and_test:
@@ -30,7 +28,6 @@ jobs:
     env:
       WALLET_PRIVATE_KEY: ${{ secrets.WALLET_PRIVATE_KEY }}
       TEST_WALLET_ADDRESS: ${{ secrets.TEST_WALLET_ADDRESS }}
-      JUDGE_PRIVATE_KEY: ${{ secrets.JUDGE_PRIVATE_KEY }}
 
     steps:
       - name: Check out code
