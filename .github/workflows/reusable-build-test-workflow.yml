@@ -30,6 +30,10 @@ jobs:
       TEST_WALLET_ADDRESS: ${{ secrets.TEST_WALLET_ADDRESS }}
 
     steps:
+      - name: Set Timestamp
+        run: |
+          echo "TIMESTAMP=$(date +%Y%m%d)" >> $GITHUB_ENV
+
       - name: Check out code
         uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
         with:
@@ -41,7 +45,7 @@ jobs:
           version: 8
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
@@ -57,3 +61,27 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Rename Report
+        run: |
+          mv -f packages/core-sdk/mochawesome-report packages/core-sdk/mochawesome-report-${{ env.TIMESTAMP }}
+          mv -f packages/core-sdk/mochawesome-report-${{ env.TIMESTAMP }}/mochawesome.html packages/core-sdk/mochawesome-report-${{ env.TIMESTAMP }}/mochawesome-${{ env.TIMESTAMP }}.html
+
+      - name: Upload Integration Test Report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: integration-test-report-${{ env.TIMESTAMP }}
+          path: packages/core-sdk/mochawesome-report-${{ env.TIMESTAMP }}
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e #v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: packages/core-sdk/mochawesome-report-${{ env.TIMESTAMP }}
+          keep_files: true
+
+      - name: Add Github Page Link to Summary
+        run: |
+          repo_name=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+          github_pages_url="https://${{ github.repository_owner }}.github.io/${repo_name}/mochawesome-${{ env.TIMESTAMP }}.html"
+          echo "## 📊Github Page Link: [View Test Report](${github_pages_url})" >> $GITHUB_STEP_SUMMARY
