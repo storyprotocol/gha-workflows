@@ -83,7 +83,7 @@ jobs:
 | [`reusable-parse-bastion-access-files.yml`](.github/workflows/reusable-parse-bastion-access-files.yml) | Parses DevNet/TestNet bastion access YAML files into JSON permissions. |
 | [`reusable-remove-gha-ip-from-sg.yml`](.github/workflows/reusable-remove-gha-ip-from-sg.yml) | Removes a GitHub Actions runner IP from DevNet/TestNet security groups and bastion security groups. |
 | [`reusable-revoke-inbound-rules.yml`](.github/workflows/reusable-revoke-inbound-rules.yml) | Revokes inbound rules from DevNet/TestNet security groups. |
-| [`reusable-secrets-scanning.yml`](.github/workflows/reusable-secrets-scanning.yml) | Runs TruffleHog with `--only-verified` and sends a Slack notification on failure. |
+| [`reusable-secrets-scanning.yml`](.github/workflows/reusable-secrets-scanning.yml) | Runs TruffleHog with `--results=verified` and sends a Slack notification on failure. |
 | [`reusable-update-security-groups.yml`](.github/workflows/reusable-update-security-groups.yml) | Adds parsed IP permissions to DevNet/TestNet security groups. |
 | [`scorecards.yml`](.github/workflows/scorecards.yml) | Manually runs OSSF Scorecards and uploads SARIF results to code scanning. |
 | [`secrets-scanning.yml`](.github/workflows/secrets-scanning.yml) | Calls the reusable TruffleHog scan on pushes to `main`. |

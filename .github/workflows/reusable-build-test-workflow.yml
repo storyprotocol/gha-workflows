@@ -38,7 +38,10 @@ jobs:
           echo "TIMESTAMP=$(date +%Y%m%d)" >> $GITHUB_ENV
 
       - name: Check out code
-        uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+        # Keep on v4.3.1: v4.4.0 backports the allow-unsafe-pr-checkout breaking change,
+        # which rejects fork-SHA checkout for pull_request_target callers (sdk pr-external.yaml).
+        # Bump only together with an explicit opt-in input threaded to this checkout step.
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ inputs.sha }}
 

@@ -69,7 +69,7 @@ jobs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
       image_name: ${{ steps.meta.outputs.image_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set image metadata
         id: meta
@@ -85,7 +85,7 @@ jobs:
           echo "image_name=$NAME" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
@@ -115,7 +115,7 @@ jobs:
     needs: [build]
     steps:
       - name: Checkout deployment repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ inputs.deploy_repo }}
           ref: ${{ inputs.deploy_ref }}
