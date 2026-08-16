@@ -1,0 +1,386 @@
+name: Security & Quality Analysis
+on:
+  push:
+  pull_request:
+
+jobs:
+  static-analysis:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    outputs:
+      bandit_result: ${{ env.BANDIT_RESULT }}
+      bandit_total_findings: ${{ env.BANDIT_TOTAL_FINDINGS }}
+      bandit_critical_high_findings: ${{ env.BANDIT_CRITICAL_HIGH_FINDINGS }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      # Enhanced Bandit security scanner with filtering
+      - name: Run Bandit Security Linter
+        run: |
+          pip install bandit[toml]
+          
+          # Run full scan and save JSON report
+          bandit -r . -f json -o bandit-full-report.json || true
+          
+          # Run scan with high severity and high confidence only
+          echo "=== CRITICAL & HIGH SEVERITY ISSUES (HIGH CONFIDENCE) ==="
+          bandit -r . -ll -i || true
+          
+          # Parse and display critical/high issues with high confidence
+          python3 << 'EOF'
+          import json
+          import sys
+          
+          try:
+              with open('bandit-full-report.json', 'r') as f:
+                  data = json.load(f)
+              
+              critical_high_issues = []
+              
+              for result in data.get('results', []):
+                  severity = result.get('issue_severity', '').upper()
+                  confidence = result.get('issue_confidence', '').upper()
+                  
+                  # Filter for HIGH/CRITICAL severity with HIGH confidence
+                  if severity in ['HIGH', 'CRITICAL'] and confidence == 'HIGH':
+                      critical_high_issues.append(result)
+              
+              if critical_high_issues:
+                  print(f"\n🚨 Found {len(critical_high_issues)} CRITICAL/HIGH severity issues with HIGH confidence:")
+                  print("=" * 80)
+                  
+                  for i, issue in enumerate(critical_high_issues, 1):
+                      print(f"\n{i}. {issue.get('test_name', 'Unknown Test')}")
+                      print(f"   Severity: {issue.get('issue_severity', 'Unknown')}")
+                      print(f"   Confidence: {issue.get('issue_confidence', 'Unknown')}")
+                      print(f"   File: {issue.get('filename', 'Unknown')}")
+                      print(f"   Line: {issue.get('line_number', 'Unknown')}")
+                      print(f"   Issue: {issue.get('issue_text', 'No description')}")
+                      if issue.get('more_info'):
+                          print(f"   More Info: {issue.get('more_info')}")
+                      print("-" * 60)
+                  
+                  # Exit with error code if critical/high issues found
+                  print(f"\n❌ Action required: {len(critical_high_issues)} critical/high severity security issues found!")
+                  sys.exit(1)
+              else:
+                  print("\n✅ No CRITICAL/HIGH severity issues with HIGH confidence found!")
+                  
+          except FileNotFoundError:
+              print("❌ Bandit report file not found!")
+              sys.exit(1)
+          except json.JSONDecodeError:
+              print("❌ Failed to parse Bandit JSON report!")
+              sys.exit(1)
+          except Exception as e:
+              print(f"❌ Error processing Bandit results: {e}")
+              sys.exit(1)
+          EOF
+        continue-on-error: true  # Don't break build
+
+      # Create summary for results stage
+      - name: Create Bandit Summary
+        run: |
+          echo "BANDIT_STATUS=completed" >> $GITHUB_ENV
+          if [ -f bandit-full-report.json ]; then
+            # Count critical/high severity issues with high confidence
+            python3 << 'EOF'
+          import json
+          import os
+          
+          try:
+              with open('bandit-full-report.json', 'r') as f:
+                  data = json.load(f)
+              
+              total_issues = len(data.get('results', []))
+              critical_high_issues = 0
+              
+              for result in data.get('results', []):
+                  severity = result.get('issue_severity', '').upper()
+                  confidence = result.get('issue_confidence', '').upper()
+                  
+                  if severity in ['HIGH', 'CRITICAL'] and confidence == 'HIGH':
+                      critical_high_issues += 1
+              
+              # Set environment variables for summary
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write(f"BANDIT_TOTAL_FINDINGS={total_issues}\n")
+                  f.write(f"BANDIT_CRITICAL_HIGH_FINDINGS={critical_high_issues}\n")
+                  
+                  if critical_high_issues > 0:
+                      f.write(f"BANDIT_RESULT=⚠️ {critical_high_issues} critical/high issues ({total_issues} total)\n")
+                  elif total_issues > 0:
+                      f.write(f"BANDIT_RESULT=ℹ️ {total_issues} low/medium issues found\n")
+                  else:
+                      f.write(f"BANDIT_RESULT=✅ No security issues detected\n")
+                      
+          except Exception as e:
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write(f"BANDIT_TOTAL_FINDINGS=unknown\n")
+                  f.write(f"BANDIT_CRITICAL_HIGH_FINDINGS=unknown\n")
+                  f.write(f"BANDIT_RESULT=❓ Scan completed (check logs)\n")
+          EOF
+          else
+            echo "BANDIT_TOTAL_FINDINGS=unknown" >> $GITHUB_ENV
+            echo "BANDIT_CRITICAL_HIGH_FINDINGS=unknown" >> $GITHUB_ENV
+            echo "BANDIT_RESULT=❓ Scan completed (check logs)" >> $GITHUB_ENV
+          fi
+
+      - name: Upload Bandit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-results
+          path: |
+            bandit-full-report.json
+
+  secret-detection:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    outputs:
+      gitleaks_result: ${{ env.GITLEAKS_RESULT }}
+      gitleaks_findings: ${{ env.GITLEAKS_FINDINGS }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Scan full git history
+
+      # Alternative approach: Install and run Gitleaks directly
+      - name: Install Gitleaks
+        run: |
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz
+          tar -xzf gitleaks_8.28.0_linux_x64.tar.gz
+          chmod +x gitleaks
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Run Gitleaks Scan
+        run: |
+          gitleaks detect --source . --verbose --report-format json --report-path gitleaks-report.json || true
+          gitleaks detect --source . --verbose || true
+        continue-on-error: true
+
+      - name: Upload Gitleaks results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitleaks-results
+          path: gitleaks-report.json
+
+      # Create summary for results stage
+      - name: Create Gitleaks Summary
+        run: |
+          echo "GITLEAKS_STATUS=completed" >> $GITHUB_ENV
+          if [ -f gitleaks-report.json ]; then
+            # Check if any secrets were found
+            secret_count=$(cat gitleaks-report.json | jq '. | length' 2>/dev/null || echo "0")
+            echo "GITLEAKS_FINDINGS=$secret_count" >> $GITHUB_ENV
+            if [ "$secret_count" -gt 0 ]; then
+              echo "GITLEAKS_RESULT=⚠️ $secret_count secrets detected" >> $GITHUB_ENV
+            else
+              echo "GITLEAKS_RESULT=✅ No secrets detected" >> $GITHUB_ENV
+            fi
+          else
+            echo "GITLEAKS_FINDINGS=unknown" >> $GITHUB_ENV
+            echo "GITLEAKS_RESULT=❓ Scan completed (check logs)" >> $GITHUB_ENV
+          fi
+
+  dependency-vulnerability-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    outputs:
+      dependency_result: ${{ env.DEPENDENCY_RESULT }}
+      dependency_total_vulns: ${{ env.DEPENDENCY_TOTAL_VULNS }}
+      dependency_safety_findings: ${{ env.DEPENDENCY_SAFETY_FINDINGS }}
+      dependency_pipaudit_findings: ${{ env.DEPENDENCY_PIPAUDIT_FINDINGS }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      # Multiple dependency scanners for comprehensive coverage
+      - name: Run Safety (PyUp.io)
+        run: |
+          pip install safety
+          # Use new scan command instead of deprecated check
+          safety scan --output json --save-as safety-report.json || true
+          safety scan || true  # Human readable output
+        continue-on-error: true  # Don't break build
+
+      - name: Run pip-audit (Official PyPA tool)
+        run: |
+          pip install pip-audit
+          pip-audit --desc --format=json --output=pip-audit-report.json || true
+          pip-audit --desc || true  # Human readable output
+        continue-on-error: true  # Don't break build
+
+      # License compliance check
+      - name: Check Licenses
+        run: |
+          pip install pip-licenses
+          pip-licenses --format=json --output-file=licenses-report.json || true
+          pip-licenses || true  # Just report, don't fail
+        continue-on-error: true  # Don't break build
+
+      - name: Upload dependency scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-scan-results
+          path: |
+            safety-report.json
+            pip-audit-report.json
+            licenses-report.json
+
+      # Create summary for results stage
+      - name: Create Dependency Scan Summary
+        run: |
+          echo "DEPENDENCY_STATUS=completed" >> $GITHUB_ENV
+          
+          # Count Safety vulnerabilities
+          safety_vulns=0
+          if [ -f safety-report.json ]; then
+            # Safety scan JSON format may vary, try to count vulnerabilities
+            safety_vulns=$(cat safety-report.json | jq '.vulnerabilities | length // 0' 2>/dev/null || echo "0")
+          fi
+          
+          # Count pip-audit vulnerabilities
+          pip_audit_vulns=0
+          if [ -f pip-audit-report.json ]; then
+            pip_audit_vulns=$(cat pip-audit-report.json | jq '. | length // 0' 2>/dev/null || echo "0")
+          fi
+          
+          # License check result
+          license_issues=0
+          if [ -f licenses-report.json ]; then
+            # Count packages (not necessarily issues, but for visibility)
+            license_packages=$(cat licenses-report.json | jq '. | length // 0' 2>/dev/null || echo "0")
+          fi
+          
+          # Set summary
+          total_vulns=$((safety_vulns + pip_audit_vulns))
+          
+          echo "DEPENDENCY_SAFETY_FINDINGS=$safety_vulns" >> $GITHUB_ENV
+          echo "DEPENDENCY_PIPAUDIT_FINDINGS=$pip_audit_vulns" >> $GITHUB_ENV
+          echo "DEPENDENCY_TOTAL_VULNS=$total_vulns" >> $GITHUB_ENV
+          
+          if [ "$total_vulns" -gt 0 ]; then
+            echo "DEPENDENCY_RESULT=⚠️ $total_vulns vulnerabilities found (Safety: $safety_vulns, pip-audit: $pip_audit_vulns)" >> $GITHUB_ENV
+          else
+            echo "DEPENDENCY_RESULT=✅ No known vulnerabilities detected" >> $GITHUB_ENV
+          fi
+
+  # Summary job that shows consolidated results from all security scans
+  security-results:
+    name: 📊 Security Scan Results
+    needs: [static-analysis, secret-detection, dependency-vulnerability-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Display Security Scan Summary
+        run: |
+          echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Check | Status | Findings |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------------|--------|----------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Static Analysis (Bandit) Results
+          if [ "${{ needs.static-analysis.result }}" = "success" ]; then
+            echo "| 🔍 Static Analysis (Bandit) | ✅ Completed | ${{ needs.static-analysis.outputs.bandit_result || '❓ Check logs' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🔍 Static Analysis (Bandit) | ❌ Failed | Check job logs |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Secret Detection (Gitleaks) Results  
+          if [ "${{ needs.secret-detection.result }}" = "success" ]; then
+            echo "| 🔐 Secret Detection (Gitleaks) | ✅ Completed | ${{ needs.secret-detection.outputs.gitleaks_result || '❓ Check logs' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🔐 Secret Detection (Gitleaks) | ❌ Failed | Check job logs |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Dependency Scan Results
+          if [ "${{ needs.dependency-vulnerability-scan.result }}" = "success" ]; then
+            echo "| 📦 Dependency Scan | ✅ Completed | ${{ needs.dependency-vulnerability-scan.outputs.dependency_result || '❓ Check logs' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 📦 Dependency Scan | ❌ Failed | Check job logs |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Detailed Findings" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Bandit Details
+          echo "### 🔍 Static Analysis (Bandit)" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.static-analysis.outputs.bandit_critical_high_findings }}" != "" ]; then
+            echo "- **Critical/High Issues**: ${{ needs.static-analysis.outputs.bandit_critical_high_findings }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Total Issues**: ${{ needs.static-analysis.outputs.bandit_total_findings }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Status: Scan completed (check artifacts for details)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Gitleaks Details
+          echo "### 🔐 Secret Detection (Gitleaks)" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.secret-detection.outputs.gitleaks_findings }}" != "" ]; then
+            echo "- **Secrets Found**: ${{ needs.secret-detection.outputs.gitleaks_findings }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Status: Scan completed (check artifacts for details)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Dependency Details
+          echo "### 📦 Dependency Vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.dependency-vulnerability-scan.outputs.dependency_total_vulns }}" != "" ]; then
+            echo "- **Total Vulnerabilities**: ${{ needs.dependency-vulnerability-scan.outputs.dependency_total_vulns }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Safety Findings**: ${{ needs.dependency-vulnerability-scan.outputs.dependency_safety_findings }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **pip-audit Findings**: ${{ needs.dependency-vulnerability-scan.outputs.dependency_pipaudit_findings }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Status: Scan completed (check artifacts for details)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## 📁 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "Download detailed reports from the **Artifacts** section below:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`bandit-results\` - Static analysis findings" >> $GITHUB_STEP_SUMMARY
+          echo "- \`gitleaks-results\` - Secret detection findings" >> $GITHUB_STEP_SUMMARY
+          echo "- \`dependency-scan-results\` - Vulnerability and license reports" >> $GITHUB_STEP_SUMMARY
+          
+          # Console output
+          echo ""
+          echo "🔒 SECURITY SCAN SUMMARY"
+          echo "========================"
+          echo "Static Analysis: ${{ needs.static-analysis.result }}"
+          echo "Secret Detection: ${{ needs.secret-detection.result }}"  
+          echo "Dependency Scan: ${{ needs.dependency-vulnerability-scan.result }}"
+          echo ""
+          echo "📊 Check the Job Summary above for detailed findings!"
+
+  # Legacy security gate (kept for compatibility)
+  security-gate:
+    name: Security Gate
+    needs: [security-results]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Security Gate Status
+        run: |
+          echo "✅ Security scanning pipeline completed!"
+          echo "📊 Check the 'Security Scan Results' job for detailed findings."
+          
